@@ -1,12 +1,13 @@
-const CNPJ_POSITIONS_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-const CNPJ_POSITIONS_2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-
 class inputMask {
   constructor() {
     this.inputs = null;
     this.tokens = {
       '0': {
         validateRule: /\d/,
+      },
+      'Z': {
+        validateRule: /\d/,
+        optional: true,
       },
       'A': {
         validateRule: /[a-zA-Z0-9]/,
@@ -15,6 +16,7 @@ class inputMask {
         validateRule: /[a-zA-Z]/,
       },
     };
+    this._allowTokensRegex = new RegExp(`[${Object.keys(this.tokens).join('')}]`, 'g');
     this.init();
   }
 
@@ -30,19 +32,27 @@ class inputMask {
   getInput() {
     this.inputs = document.querySelectorAll('input[data-mask]');
     this.inputs.forEach((input) => {
+      const mask = input.dataset.mask;
+
+      this.setInputLength(input, mask);
+      this.setInputMode(input, mask);
+
       input.addEventListener('input', this.maskInput.bind(this));
       input.addEventListener('blur', this.validateInput.bind(this));
     });
   }
 
-  setInputLength(input, mask, prefix = '', suffix = '') {
+  setInputLength(input, mask) {
     if(input.hasAttribute('minlength') && input.hasAttribute('maxlength')) {
         return;
     }
 
-    const maskLength = mask.length + (prefix?.length || 0) + (suffix?.length || 0);
+    const maskLength = mask.length;
+    const optionalCount = (mask.match(/Z/g) || []).length;
+    const requiredMaskLength = maskLength - optionalCount;
+
     if(!input.hasAttribute('minlength')) {
-        input.minLength = maskLength;
+        input.minLength = requiredMaskLength;
     }
 
     if(!input.hasAttribute('maxlength')) {
@@ -70,46 +80,35 @@ class inputMask {
     }
 
     const mask = input.dataset.mask;
-    const prefix = input.dataset.maskPrefix;
-    const suffix = input.dataset.maskSuffix;
 
-    this.setInputLength(input, mask, prefix, suffix);
-    this.setInputMode(input, mask);
+    const unmaskedValue = this.removeMask(mask, input.value);
 
-    const unmaskedValue = this.removeMask(mask, input.value, prefix, suffix);
-    const isReverse = input.dataset.maskReverse === 'true';
+    let isReverse = input.dataset.maskReverse === 'true';
+    if (!input.dataset.maskReverse) {
+      isReverse = mask.startsWith('Z');
+    }
+
     const maskedValue = this.applyMask(
       unmaskedValue,
       mask,
-      isReverse,
-      prefix,
-      suffix
+      isReverse
     );
 
     input.value = maskedValue;
     input.checkValidity();
   }
 
-  removeMask(mask, value, prefix, suffix) {
+  removeMask(mask, value) {
     if (!mask || !value) {
       return value;
     }
 
-    if (prefix && value.startsWith(prefix)) {
-      value = value.substring(prefix.length);
-    }
-
-    if (suffix && value.endsWith(suffix)) {
-      value = value.substring(0, value.length - suffix.length);
-    }
-
-    const allowTokens = Object.keys(this.tokens);
-    const allowTokensRegex = new RegExp(`[${allowTokens.join('')}]`, 'g');
-    const maskLiteralsToRemove = mask.replace(allowTokensRegex, '');
-    return value.replace(new RegExp(`[${maskLiteralsToRemove}]`, 'g'), '');
+    const maskLiteralsToRemove = mask.replace(this._allowTokensRegex, '');
+    const literalRegex = new RegExp(`[${maskLiteralsToRemove}]`, 'g');
+    return value.replace(literalRegex, '');
   }
 
-  applyMask(unmaskedValue, mask, isReverse, prefix, suffix) {
+  applyMask(unmaskedValue, mask, isReverse) {
     if (!unmaskedValue) {
       return unmaskedValue;
     }
@@ -127,13 +126,13 @@ class inputMask {
       if (this.tokens[maskChars[i]]) {
         const token = this.tokens[maskChars[i]];
         if (
-          new RegExp(token.validateRule).test(
-            unmaskedValue[valueIndex]
-          ) &&
+          token.validateRule.test(unmaskedValue[valueIndex]) &&
           unmaskedValue[valueIndex]
         ) {
           maskedValue += unmaskedValue[valueIndex];
           valueIndex++;
+        } else if (token.optional) {
+          continue;
         } else {
           break;
         }
@@ -149,14 +148,6 @@ class inputMask {
         : maskedValue;
     }
 
-    if (prefix) {
-      maskedValue = prefix + maskedValue;
-    }
-
-    if (suffix) {
-      maskedValue = maskedValue + suffix;
-    }
-
     return maskedValue;
   }
 
@@ -165,7 +156,18 @@ class inputMask {
     const value = input.value;
     const currentLength = value.length;
     const minLength = input.minLength;
-    const validationMethod = input.dataset.maskValidation || null;
+
+    const customValidator = input.dataset.maskValidate;
+    if (customValidator && typeof window[customValidator] === 'function') {
+      const isValid = window[customValidator](value, input);
+      if (!isValid) {
+        const defaultMessage = 'Invalid value according to custom validation.';
+        input.setCustomValidity(defaultMessage);
+        input.reportValidity();
+        return;
+      }
+    }
+
     if (currentLength > 0 && currentLength < minLength) {
       const defaultMessage = `The minimum number of characters required is ${minLength}. Please complete the field.`;
       input.setCustomValidity(defaultMessage);
@@ -173,79 +175,7 @@ class inputMask {
       return;
     }
 
-    const validationMethods = {
-      cpf: this.isValidCPF,
-      cnpj: this.isValidCNPJ,
-    };
-
-    if (value && validationMethod && validationMethods[validationMethod]) {
-      const isValid = validationMethods[validationMethod](value);
-      if (!isValid) {
-        const defaultMessage = `Invalid ${validationMethod.toUpperCase()}. Please enter a valid value.`;
-        input.setCustomValidity(defaultMessage);
-        input.reportValidity();
-        return;
-      }
-    }
-
     input.setCustomValidity('');
-  }
-
-  isValidCPF(cpf) {
-    const sanitizedCPF = cpf.replace(/[^\d]+/g, '');
-    if (sanitizedCPF.length !== 11 || /^(\d)\1{10}$/.test(sanitizedCPF)) {
-      return false;
-    }
-
-    for (
-      let verifierPosition = 9;
-      verifierPosition < 11;
-      verifierPosition++
-    ) {
-      let sumOfProducts = 0;
-
-      for (
-        let digitIndex = 0;
-        digitIndex < verifierPosition;
-        digitIndex++
-      ) {
-        const digit = parseInt(sanitizedCPF[digitIndex]);
-        const weight = verifierPosition + 1 - digitIndex;
-        sumOfProducts += digit * weight;
-      }
-
-      const expectedVerifier = ((sumOfProducts * 10) % 11) % 10;
-
-      const actualVerifier = parseInt(sanitizedCPF[verifierPosition]);
-      if (actualVerifier !== expectedVerifier) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  isValidCNPJ(cnpj) {
-    cnpj = cnpj.replace(/[^\d]+/g, '');
-
-    if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) {
-      return false;
-    }
-
-    const calculateDigit = (base, positions) => {
-      let sum = 0;
-      for (let i = 0; i < base.length; i++) {
-        sum += base[i] * positions[i];
-      }
-      const remainder = sum % 11;
-      return remainder < 2 ? 0 : 11 - remainder;
-    };
-
-    const baseCNPJ = cnpj.slice(0, 12);
-    const digit1 = calculateDigit(baseCNPJ, CNPJ_POSITIONS_1);
-    const digit2 = calculateDigit(baseCNPJ + digit1, CNPJ_POSITIONS_2);
-
-    return cnpj === baseCNPJ + digit1.toString() + digit2.toString();
   }
 }
 
