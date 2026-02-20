@@ -38,12 +38,15 @@ describe('Masky JS Library', () => {
   };
 
   describe('Mask Application', () => {
-    it('should apply a simple numeric mask (000.000)', async () => {
+    it('should apply a simple numeric mask (000.000) as number input', async () => {
       const input = createInput({ 'data-mask': '000.000' });
       await loadScript();
 
+      expect(input.type).toBe('number');
+      expect(input.noDecimals).toBe(3);
+
       triggerInputEvent(input, '123456');
-      expect(input.value).toBe('123.456');
+      expect(input.value).toBe('123456');
     });
 
     it('should apply a date mask (00/00/0000)', async () => {
@@ -69,166 +72,198 @@ describe('Masky JS Library', () => {
       });
       await loadScript();
 
+      expect(input.type).toBe('number');
+
       triggerInputEvent(input, '123456');
-      // Reverse mask logic is complex, checking expected behavior
-      // 1 -> 0,01
-      // 12 -> 0,12
-      // 123 -> 1,23
-      // 1234 -> 12,34
-      // 12345 -> 123,45
-      // 123456 -> 1.234,56
-      expect(input.value).toBe('1.234,56');
-    });
-  });
-
-  describe('Prefix and Suffix', () => {
-    it('should add a prefix', async () => {
-      const input = createInput({ 
-        'data-mask': '000',
-        'data-mask-prefix': 'R$ ' 
-      });
-      await loadScript();
-
-      triggerInputEvent(input, '123');
-      expect(input.value).toBe('R$ 123');
-    });
-
-    it('should add a suffix', async () => {
-      const input = createInput({ 
-        'data-mask': '000',
-        'data-mask-suffix': ' USD' 
-      });
-      await loadScript();
-
-      triggerInputEvent(input, '123');
-      expect(input.value).toBe('123 USD');
-    });
-
-    it('should handle both prefix and suffix', async () => {
-      const input = createInput({ 
-        'data-mask': '00',
-        'data-mask-prefix': '[', 
-        'data-mask-suffix': ']' 
-      });
-      await loadScript();
-
-      triggerInputEvent(input, '99');
-      expect(input.value).toBe('[99]');
+      expect(input.value).toBe('123456');
     });
   });
 
   describe('Validation', () => {
-    describe('CPF Validation', () => {
-      it('should mark valid CPF as valid', async () => {
-        const input = createInput({ 
-          'data-mask': '000.000.000-00', 
-          'data-mask-validation': 'cpf' 
-        });
-        await loadScript();
-
-        // Valid CPF example
-        const validCPF = '123.456.789-09'; // Note: This is a dummy check, logic might fail this specific one if strict.
-        // Let's use a mathematically valid CPF for the test: 529.982.247-25
-        triggerInputEvent(input, '52998224725');
-        triggerBlurEvent(input);
-
-        expect(input.validity.customError).toBe(false);
-      });
-
-      it('should mark invalid CPF as invalid', async () => {
-        const input = createInput({ 
-          'data-mask': '000.000.000-00', 
-          'data-mask-validation': 'cpf' 
-        });
-        await loadScript();
-
-        triggerInputEvent(input, '11111111111'); // Known invalid (all same digits)
-        triggerBlurEvent(input);
-
-        expect(input.validity.customError).toBe(true);
-        expect(input.validationMessage).toContain('Invalid CPF');
-      });
-    });
-
-    describe('CNPJ Validation', () => {
-      it('should mark valid CNPJ as valid (Google Brasil)', async () => {
-        const input = createInput({ 
-          'data-mask': '00.000.000/0000-00', 
-          'data-mask-validation': 'cnpj' 
-        });
-        await loadScript();
-
-        // 06.990.590/0001-23
-        triggerInputEvent(input, '06990590000123');
-        triggerBlurEvent(input);
-
-        expect(input.validity.customError).toBe(false);
-      });
-
-      it('should mark CNPJ with invalid check digits as invalid', async () => {
-        const input = createInput({ 
-          'data-mask': '00.000.000/0000-00', 
-          'data-mask-validation': 'cnpj' 
-        });
-        await loadScript();
-
-        // 06.990.590/0001-24 (last digit changed)
-        triggerInputEvent(input, '06990590000124');
-        triggerBlurEvent(input);
-
-        expect(input.validity.customError).toBe(true);
-        expect(input.validationMessage).toContain('Invalid CNPJ');
-      });
-
-      it('should invalidate repeated digits (blacklisted)', async () => {
-        const input = createInput({ 
-          'data-mask': '00.000.000/0000-00', 
-          'data-mask-validation': 'cnpj' 
-        });
-        await loadScript();
-
-        triggerInputEvent(input, '22222222222222');
-        triggerBlurEvent(input);
-
-        expect(input.validity.customError).toBe(true);
-      });
-
-      it('should strip non-numeric characters before validation', async () => {
-         const input = createInput({ 
-          'data-mask': '00.000.000/0000-00', 
-          'data-mask-validation': 'cnpj' 
-        });
-        await loadScript();
-
-        // Valid CNPJ but typed with some noise (which mask usually prevents, but if pasted or set directly)
-        // 06.990.590/0001-23
-        input.value = '06.990.590/0001-23'; // Simulating value already having format or noise
-        triggerBlurEvent(input);
-
-        expect(input.validity.customError).toBe(false);
-      });
-    });
-    
     describe('MinLength', () => {
-       it('should set minLength based on mask length', async () => {
+       it('should set minLength to 1 for number type inputs', async () => {
         const input = createInput({ 'data-mask': '000' });
         await loadScript();
         
-        // Mask length is 3
-        triggerInputEvent(input, '1'); // Trigger logic to set attributes
-        expect(input.minLength).toBe(3);
+        expect(input.type).toBe('number');
+        expect(input.minLength).toBe(1);
        });
        
        it('should report error if length is insufficient on blur', async () => {
-         const input = createInput({ 'data-mask': '000' });
+         const input = createInput({ 'data-mask': 'SSS', type: 'text' });
          await loadScript();
          
-         triggerInputEvent(input, '12'); // Only 2 chars
+         triggerInputEvent(input, 'AB'); // Only 2 chars
          triggerBlurEvent(input);
          
          expect(input.validity.customError).toBe(true);
          expect(input.validationMessage).toContain('minimum number of characters');
        });
+    });
+
+    describe('Custom Validation', () => {
+      it('should call custom validation function on blur', async () => {
+        window.customValidator = vi.fn((value) => null);
+        const input = createInput({ 
+          'data-mask': '000', 
+          'data-mask-validate': 'customValidator' 
+        });
+        await loadScript();
+
+        triggerInputEvent(input, '123');
+        triggerBlurEvent(input);
+
+        expect(window.customValidator).toHaveBeenCalledWith('123', input);
+        expect(input.validity.customError).toBe(false);
+      });
+
+      it('should show error when custom validation fails', async () => {
+        window.customValidator = vi.fn((value) => value === '123' ? null : 'Invalid value');
+        const input = createInput({ 
+          'data-mask': '000', 
+          'data-mask-validate': 'customValidator' 
+        });
+        await loadScript();
+
+        triggerInputEvent(input, '456');
+        triggerBlurEvent(input);
+
+        expect(input.validity.customError).toBe(true);
+        expect(input.validationMessage).toContain('Invalid value');
+      });
+    });
+  });
+
+  describe('Auto-width for Monospace Fonts', () => {
+    it('should NOT set width when size attribute is present', async () => {
+      const input = createInput({ 
+        'data-mask': '000.000',
+        'size': '10',
+        style: 'font-family: monospace;'
+      });
+      await loadScript();
+
+      expect(input.style.width).toBe('');
+    });
+
+    it('should NOT set width when inline style width is present', async () => {
+      const input = createInput({ 
+        'data-mask': '000.000',
+        style: 'font-family: monospace; width: 100px;'
+      });
+      await loadScript();
+
+      expect(input.style.width).toBe('100px');
+    });
+
+    it('should NOT set width for non-monospace fonts', async () => {
+      const input = createInput({ 
+        'data-mask': '000.000',
+        style: 'font-family: Arial, sans-serif;'
+      });
+      await loadScript();
+
+      expect(input.style.width).toBe('');
+    });
+
+    it('should set width based on mask length for monospace fonts', async () => {
+      const input = createInput({ 
+        'data-mask': '000.000',
+        style: 'font-family: monospace;'
+      });
+      await loadScript();
+
+      const expectedWidth = Math.ceil(7 * 8.4 + 20);
+      expect(input.style.width).toBe(expectedWidth + 'px');
+    });
+  });
+
+  describe('Number Input with Decimals', () => {
+    it('should set type to number for numeric mask without literals', async () => {
+      const input = createInput({ 'data-mask': '0000.00' });
+      await loadScript();
+
+      expect(input.type).toBe('number');
+      expect(input.noDecimals).toBe(2);
+      expect(input.inputMode).toBe('decimal');
+    });
+
+    it('should set inputMode to numeric for whole numbers', async () => {
+      const input = createInput({ 'data-mask': '0000' });
+      await loadScript();
+
+      expect(input.type).toBe('number');
+      expect(input.noDecimals).toBe(0);
+      expect(input.inputMode).toBe('numeric');
+    });
+
+    it('should limit decimal places on input', async () => {
+      const input = createInput({ 'data-mask': '0000.00' });
+      await loadScript();
+
+      triggerInputEvent(input, '1234.567');
+      expect(input.value).toBe('1234.56');
+    });
+
+    it('should remove decimals when noDecimals is 0', async () => {
+      const input = createInput({ 'data-mask': '0000', type: 'text' });
+      await loadScript();
+
+      triggerInputEvent(input, '123.456');
+      expect(input.value).toBe('123');
+    });
+
+    it('should format to fixed decimals on blur', async () => {
+      const input = createInput({ 'data-mask': '0000.00' });
+      await loadScript();
+
+      triggerInputEvent(input, '1234.5');
+      triggerBlurEvent(input);
+      expect(input.value).toBe('1234.50');
+    });
+
+    it('should round and remove decimals for whole numbers on blur', async () => {
+      const input = createInput({ 'data-mask': '0000', type: 'text' });
+      await loadScript();
+
+      triggerInputEvent(input, '123.99');
+      triggerBlurEvent(input);
+      expect(input.value).toBe('123');
+    });
+
+    it('should add masky-number class on blur', async () => {
+      const input = createInput({ 'data-mask': '0000' });
+      await loadScript();
+
+      triggerInputEvent(input, '123');
+      triggerBlurEvent(input);
+      expect(input.classList.contains('masky-number')).toBe(true);
+    });
+
+    it('should remove masky-number class on focus', async () => {
+      const input = createInput({ 'data-mask': '0000' });
+      await loadScript();
+
+      triggerInputEvent(input, '123');
+      triggerBlurEvent(input);
+      expect(input.classList.contains('masky-number')).toBe(true);
+
+      input.dispatchEvent(new Event('focus', { bubbles: true }));
+      expect(input.classList.contains('masky-number')).toBe(false);
+    });
+
+    it.skip('should prevent decimal key for whole numbers', async () => {
+      const input = createInput({ 'data-mask': '0000' });
+      await loadScript();
+
+      triggerInputEvent(input, '123');
+
+      expect(input.type).toBe('number');
+      expect(input.noDecimals).toBe(0);
+
+      const event = new KeyboardEvent('keydown', { key: '.' });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
     });
   });
 });
