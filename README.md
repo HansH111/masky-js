@@ -81,6 +81,29 @@ input.masky-number {
 }
 ```
 
+## JavaScript API
+
+Masky.js uses a singleton pattern. The first call creates the instance, subsequent calls return the same instance:
+
+```javascript
+const masky = new inputMask();
+
+// Reinitialize - useful for SPAs or dynamic content
+masky.reinit();
+
+// Clean up - removes all event listeners
+masky.destroy();
+```
+
+**When to use:**
+- `reinit()` - Call after dynamically adding inputs to the DOM (AJAX, SPA navigation)
+- `destroy()` - Call when removing the library or page cleanup
+
+**How it works:**
+- `destroy()` removes all event listeners and restores input types
+- `reinit()` completely rescans the DOM for new inputs
+- Works correctly with inputs that already have `type="number"` in HTML
+
 ## Why Masky.js?
 
 - **Automatic Enhancements:** Input mode (`inputmode`), field limits (`minlength` and `maxlength`), and input width (for monospace fonts) are calculated and applied automatically based on the mask.

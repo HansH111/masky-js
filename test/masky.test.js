@@ -43,7 +43,7 @@ describe('Masky JS Library', () => {
       await loadScript();
 
       expect(input.type).toBe('number');
-      expect(input.noDecimals).toBe(3);
+      expect(input.noDec).toBe(3);
 
       triggerInputEvent(input, '123456');
       expect(input.value).toBe('123456');
@@ -184,7 +184,7 @@ describe('Masky JS Library', () => {
       await loadScript();
 
       expect(input.type).toBe('number');
-      expect(input.noDecimals).toBe(2);
+      expect(input.noDec).toBe(2);
       expect(input.inputMode).toBe('decimal');
     });
 
@@ -193,7 +193,7 @@ describe('Masky JS Library', () => {
       await loadScript();
 
       expect(input.type).toBe('number');
-      expect(input.noDecimals).toBe(0);
+      expect(input.noDec).toBe(0);
       expect(input.inputMode).toBe('numeric');
     });
 
@@ -205,7 +205,7 @@ describe('Masky JS Library', () => {
       expect(input.value).toBe('1234.56');
     });
 
-    it('should remove decimals when noDecimals is 0', async () => {
+    it('should remove decimals when noDec is 0', async () => {
       const input = createInput({ 'data-mask': '0000', type: 'text' });
       await loadScript();
 
@@ -259,7 +259,7 @@ describe('Masky JS Library', () => {
       triggerInputEvent(input, '123');
 
       expect(input.type).toBe('number');
-      expect(input.noDecimals).toBe(0);
+      expect(input.noDec).toBe(0);
 
       const event = new KeyboardEvent('keydown', { key: '.' });
       input.dispatchEvent(event);

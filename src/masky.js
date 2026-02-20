@@ -1,6 +1,12 @@
 class inputMask {
   constructor() {
+    if (inputMask._instance) {
+      return inputMask._instance;
+    }
+    inputMask._instance = this;
+
     this.inputs = null;
+    this._inputData = new Map();
     this.tokens = {
       '0': {
         validateRule: /\d/,
@@ -14,10 +20,29 @@ class inputMask {
     };
     this._allowTokensRegex = new RegExp(`[${Object.keys(this.tokens).join('')}]`, 'g');
     this._regexCache = {};
-    this._boundMethods = {};
     this._CHAR_WIDTH = 8.4;
     this._PADDING = 20;
     this.init();
+  }
+
+  destroy() {
+    this._inputData.forEach((data, input) => {
+      const { listeners, typeSet } = data;
+      input.removeEventListener('keydown', listeners.checkKeydown);
+      input.removeEventListener('input', listeners.maskInput);
+      input.removeEventListener('focus', listeners.checkFocus);
+      input.removeEventListener('blur', listeners.validateInput);
+
+      if (typeSet) {
+        input.removeAttribute('type');
+      }
+    });
+    this._inputData.clear();
+  }
+
+  reinit() {
+    this.destroy();
+    this.getInput();
   }
 
   init() {
@@ -31,31 +56,39 @@ class inputMask {
   getInput() {
     this.inputs = document.querySelectorAll('input[data-mask]');
 
-    this._boundMethods = {
-      checkKeydown: this.checkKeydown.bind(this),
-      maskInput: this.maskInput.bind(this),
-      checkFocus: this.checkFocus.bind(this),
-      validateInput: this.validateInput.bind(this),
-    };
-
     this.inputs.forEach((input) => {
+      if (this._inputData.has(input)) {
+        return;
+      }
+
       const mask = input.dataset.mask;
 
+      const hadType = input.hasAttribute('type');
       this.setInputMode(input, mask);
+      const typeSet = !hadType && input.type === 'number';
+
       this.setInputLength(input, mask);
       this.setInputWidth(input, mask);
 
-      input.addEventListener('keydown', this._boundMethods.checkKeydown);
-      input.addEventListener('input', this._boundMethods.maskInput);
-      input.addEventListener('focus', this._boundMethods.checkFocus);
-      input.addEventListener('blur', this._boundMethods.validateInput);
+      const listeners = {
+        checkKeydown: this.checkKeydown.bind(this),
+        maskInput: this.maskInput.bind(this),
+        checkFocus: this.checkFocus.bind(this),
+        validateInput: this.validateInput.bind(this),
+      };
+
+      input.addEventListener('keydown', listeners.checkKeydown);
+      input.addEventListener('input', listeners.maskInput);
+      input.addEventListener('focus', listeners.checkFocus);
+      input.addEventListener('blur', listeners.validateInput);
+
+      this._inputData.set(input, { listeners, typeSet });
     });
   }
 
   checkKeydown(event) {
     const input = event.target;
-    if (input.type === 'number' && input.noDecimals === 0 &&
-        (event.key === '.' || event.key === ',')) {
+    if (input.type === 'number' && input.noDec === 0 && (event.key === '.' || event.key === ',')) {
       event.preventDefault();
     }
   }
@@ -88,15 +121,35 @@ class inputMask {
   }
 
   setInputMode(input, mask) {
+    const splitVal = mask.split('.');
+    input.noDec = splitVal.length > 1 ? splitVal[1].length : 0;
+
     if (!input.hasAttribute('type')) {
       const textMask = mask.replace(/[.,0]/g, '');
       input.type = textMask.length > 0 ? 'text' : 'number';
-      if (input.type === 'number') {
-        const splitVal   = mask.split('.');
-        input.noDecimals = splitVal.length > 1 ? splitVal[1].length : 0;
-        input.inputMode = input.noDecimals > 0 ? 'decimal' : 'numeric';
-      }
     }
+
+    if (input.type === 'number') {
+      input.inputMode = input.noDec > 0 ? 'decimal' : 'numeric';
+    }
+  }
+
+  _formatNumber(input) {
+    if (input.type !== 'number' || !input.value) {
+      return;
+    }
+
+    const num = Number(input.value);
+    if (isNaN(num)) {
+      return;
+    }
+
+    if (input.noDec > 0) {
+      input.value = num.toFixed(input.noDec);
+    } else {
+      input.value = Math.round(num).toString();
+    }
+    input.classList.add('masky-number');
   }
 
   maskInput(event) {
@@ -110,11 +163,11 @@ class inputMask {
     if (input.type === 'number') {
       const val = input.value.replace(/[^\d.-]/g, '');
       const splitVal = val.split('.');
-      if (input.noDecimals > 0) {
-        if (splitVal.length === 2 && splitVal[1].length > input.noDecimals) {
-          input.value = splitVal[0] + '.' + splitVal[1].substring(0, input.noDecimals);
+      if (input.noDec > 0) {
+        if (splitVal.length === 2 && splitVal[1].length > input.noDec) {
+          input.value = splitVal[0] + '.' + splitVal[1].substring(0, input.noDec);
         }
-      } else if (input.noDecimals === 0 && splitVal.length > 1) {
+      } else if (input.noDec === 0 && splitVal.length > 1) {
         input.value = splitVal[0];
       }
     } else {
@@ -199,21 +252,8 @@ class inputMask {
         return;
       }
     }
-    if (input.type === 'number') {
-      let val = input.value;
-      if (!val) return;
-
-      let num = Number(val);
-      if (isNaN(num)) return;
-
-      if (input.noDecimals > 0) {
-        input.value = num.toFixed(input.noDecimals);
-      } else {
-        input.value = Math.round(num).toString();
-      }
-      input.classList.add('masky-number');
-    }
+    this._formatNumber(input);
     input.setCustomValidity('');
   }
 }
-new inputMask();
+const masky = new inputMask();
