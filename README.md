@@ -2,12 +2,12 @@
 
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/masky-js)](https://bundlephobia.com/package/masky-js)
 
-📦 Masky.js – A compact and **high-performance JavaScript library for input masking**. Weighing only **1.3 KB** (gzip), it’s optimized for fast loading and ideal for any project requiring lightweight, flexible, and customizable input masks.
+📦 Masky.js – A compact and **high-performance JavaScript library for input masking**. Weighing only **1.5 KB** (gzip), it’s optimized for fast loading and ideal for any project requiring lightweight, flexible, and customizable input masks.
 
 ---
 
 ## Features
-- **Super Lightweight:** Only **1.3 KB gzipped**, minimizing your app's bundle size.
+- **Super Lightweight:** Only **1.5 KB gzipped**, minimizing your app's bundle size.
 - **Automatic Enhancements:**
     - **inputmode support:** Dynamically adjusts for better mobile user experience.
     - **minlength and maxlength:** Automatically calculated based on the mask.
@@ -36,6 +36,30 @@ When an input has a monospace font, Masky automatically adjusts the width:
 
 ```html
 <input type="text" data-mask="000.000" style="font-family: monospace;" />
+```
+
+**Automatic Type Detection**
+
+Masky automatically detects if the input should be text or number based on the mask:
+
+- Mask with only `0` and `.` (e.g., `000.00`) → `type="number"`
+- Mask with other characters (e.g., `(00)`) → `type="text"`
+
+```html
+<!-- Automatically becomes type="number" -->
+<input data-mask="000.00" />
+
+<!-- Automatically becomes type="number" with minlength=1 -->
+<input data-mask="0000" />
+```
+
+**Force Text Type**
+
+If you want text input for a mask with only numbers and dots, explicitly set `type="text"`:
+
+```html
+<!-- Force text input (useful for formatted numbers) -->
+<input type="text" data-mask="000.000" />
 ```
 
 ## Available Tokens
@@ -107,7 +131,7 @@ masky.destroy();
 ## Why Masky.js?
 
 - **Automatic Enhancements:** Input mode (`inputmode`), field limits (`minlength` and `maxlength`), and input width (for monospace fonts) are calculated and applied automatically based on the mask.
-- **Built for Performance:** With only **1.3 KB** gzipped, it's one of the most efficient libraries available.
+- **Built for Performance:** With only **1.5 KB** gzipped, it's one of the most efficient libraries available.
 - **Flexibility:** Perfect for any environment—websites, frameworks, or CMS integrations.
 - **Ease of Integration:** Add `data-mask` to your inputs, and Masky.js takes care of formatting, validation, and user experience.
 
