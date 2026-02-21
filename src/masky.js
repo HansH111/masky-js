@@ -1,132 +1,64 @@
-class inputMask {
+class InputMask {
+  static #instance;
+  #data = new Map();
+  #tokens = {
+    '0': { validate: /\d/ },
+    'A': { validate: /[a-zA-Z0-9]/ },
+    'S': { validate: /[a-zA-Z]/ },
+  };
+  #tokenChars = Object.keys(this.#tokens).join('');
+  #tokenRe = new RegExp(`[${this.#tokenChars}]`, 'g');
+  #regexCache = {};
+  #charWidth = 8.4;
+  #padding = 20;
+
   constructor() {
-    if (inputMask._instance) {
-      return inputMask._instance;
-    }
-    inputMask._instance = this;
-
-    this.inputs = null;
-    this._inputData = new Map();
-    this.tokens = {
-      '0': {
-        validateRule: /\d/,
-      },
-      'A': {
-        validateRule: /[a-zA-Z0-9]/,
-      },
-      'S': {
-        validateRule: /[a-zA-Z]/,
-      },
-    };
-    this._allowTokensRegex = new RegExp(`[${Object.keys(this.tokens).join('')}]`, 'g');
-    this._regexCache = {};
-    this._CHAR_WIDTH = 8.4;
-    this._PADDING = 20;
-    this.init();
+    if (InputMask.#instance) return InputMask.#instance;
+    InputMask.#instance = this;
+    this.#init();
   }
 
-  destroy() {
-    this._inputData.forEach((data, input) => {
-      const { listeners, typeSet } = data;
-      input.removeEventListener('keydown', listeners.checkKeydown);
-      input.removeEventListener('input', listeners.maskInput);
-      input.removeEventListener('focus', listeners.checkFocus);
-      input.removeEventListener('blur', listeners.validateInput);
-
-      if (typeSet) {
-        input.removeAttribute('type');
-      }
-    });
-    this._inputData.clear();
-  }
-
-  reinit() {
-    this.destroy();
-    this.getInput();
-  }
-
-  init() {
+  #init() {
     if (document.readyState !== 'complete') {
-      window.addEventListener('load', this.init.bind(this));
+      window.addEventListener('load', () => this.#init(), { once: true });
       return;
     }
-    this.getInput();
+    document.querySelectorAll('input[data-mask]:not([data-masky-init])')
+      .forEach(el => this.#setupInput(el));
   }
 
-  getInput() {
-    this.inputs = document.querySelectorAll('input[data-mask]');
+  #setupInput(input) {
+    const mask = input.dataset.mask;
+    input.dataset.maskyInit = '';
+    
+    const hadType = input.hasAttribute('type');
+    this.#setModeAndType(input, mask);
+    const typeChanged = !hadType && input.type === 'number';
 
-    this.inputs.forEach((input) => {
-      if (this._inputData.has(input)) {
-        return;
-      }
+    this.#setLengths(input, mask);
+    this.#setWidth(input, mask);
 
-      const mask = input.dataset.mask;
+    const handlers = {
+      keydown: e => this.#onKeydown(e),
+      input:   e => this.#onInput(e),
+      focus:   e => this.#onFocus(e),
+      blur:    e => this.#onBlur(e),
+    };
 
-      const hadType = input.hasAttribute('type');
-      this.setInputMode(input, mask);
-      const typeSet = !hadType && input.type === 'number';
+    Object.entries(handlers).forEach(([ev, fn]) =>
+      input.addEventListener(ev, fn)
+    );
 
-      this.setInputLength(input, mask);
-      this.setInputWidth(input, mask);
-
-      const listeners = {
-        checkKeydown: this.checkKeydown.bind(this),
-        maskInput: this.maskInput.bind(this),
-        checkFocus: this.checkFocus.bind(this),
-        validateInput: this.validateInput.bind(this),
-      };
-
-      input.addEventListener('keydown', listeners.checkKeydown);
-      input.addEventListener('input', listeners.maskInput);
-      input.addEventListener('focus', listeners.checkFocus);
-      input.addEventListener('blur', listeners.validateInput);
-
-      this._inputData.set(input, { listeners, typeSet });
-    });
+    this.#data.set(input, { handlers, typeChanged });
   }
 
-  checkKeydown(event) {
-    const input = event.target;
-    if (input.type === 'number' && input.noDec === 0 && (event.key === '.' || event.key === ',')) {
-      event.preventDefault();
-    }
-  }
-
-  _calculateWidth(mask) {
-    const width = Math.ceil(mask.length * this._CHAR_WIDTH + this._PADDING);
-    return width + 'px';
-  }
-
-  setInputWidth(input, mask) {
-    const fontFamily = (input.style.fontFamily || '').toLowerCase();
-    if (input.hasAttribute('size') || input.style.width || fontFamily !== 'monospace') {
-      return;
-    }
-    input.style.width = this._calculateWidth(mask);
-  }
-
-  setInputLength(input, mask) {
-    if (!input.hasAttribute('minlength')) {
-      if (input.type === 'number') {
-        input.setAttribute('minlength', 1);
-      } else {
-        input.setAttribute('minlength', mask.length);
-      }
-    }
-
-    if (!input.hasAttribute('maxlength')) {
-      input.setAttribute('maxlength', mask.length);
-    }
-  }
-
-  setInputMode(input, mask) {
-    const splitVal = mask.split('.');
-    input.noDec = splitVal.length > 1 ? splitVal[1].length : 0;
+  #setModeAndType(input, mask) {
+    const parts = mask.split('.');
+    input.noDec = parts.length > 1 ? parts[1].length : 0;
 
     if (!input.hasAttribute('type')) {
-      const textMask = mask.replace(/[.,0]/g, '');
-      input.type = textMask.length > 0 ? 'text' : 'number';
+      const hasLetters = mask.replace(/[.,0]/g, '').length > 0;
+      input.type = hasLetters ? 'text' : 'number';
     }
 
     if (input.type === 'number') {
@@ -134,126 +66,124 @@ class inputMask {
     }
   }
 
-  _formatNumber(input) {
-    if (input.type !== 'number' || !input.value) {
-      return;
-    }
-
-    const num = Number(input.value);
-    if (isNaN(num)) {
-      return;
-    }
-
-    if (input.noDec > 0) {
-      input.value = num.toFixed(input.noDec);
-    } else {
-      input.value = Math.round(num).toString();
-    }
-    input.classList.add('masky-number');
+  #setLengths(input, mask) {
+    if (!input.hasAttribute('minlength'))
+      input.minLength = input.type === 'number' ? 1 : mask.length;
+    if (!input.hasAttribute('maxlength'))
+      input.maxLength = mask.length;
   }
 
-  maskInput(event) {
-    const input = event.target;
+  #setWidth(input, mask) {
+    if (input.style.width || input.hasAttribute('size')) return;
+ 
+    const style = getComputedStyle(input);
+    if (style.fontFamily.toLowerCase().includes('monospace')) {
+        input.style.width = `${Math.ceil(mask.length * this.#charWidth + this.#padding)}px`;
+    }
+  }
+
+  #onKeydown(e) {
+    const { target: input } = e;
+    if (input.type !== 'number' || input.noDec > 0) return;
+    if (e.key === '.' || e.key === ',') e.preventDefault();
+  }
+
+  #onInput(e) {
+    const input = e.target;
     input.setCustomValidity('');
 
-    if (event.inputType === 'deleteContentBackward') {
+    if (e.inputType === 'deleteContentBackward') return;
+
+    if (input.type === 'number') {
+      let val = input.value.replace(/[^\d.-]/g, '');
+      const [int, dec = ''] = val.split('.');
+      if (input.noDec === 0) {
+        input.value = int;
+      } else if (dec.length > input.noDec) {
+        input.value = int + '.' + dec.slice(0, input.noDec);
+      }
       return;
     }
 
-    if (input.type === 'number') {
-      const val = input.value.replace(/[^\d.-]/g, '');
-      const splitVal = val.split('.');
-      if (input.noDec > 0) {
-        if (splitVal.length === 2 && splitVal[1].length > input.noDec) {
-          input.value = splitVal[0] + '.' + splitVal[1].substring(0, input.noDec);
-        }
-      } else if (input.noDec === 0 && splitVal.length > 1) {
-        input.value = splitVal[0];
-      }
-    } else {
-      const mask = input.dataset.mask;
-      const unmaskedValue = this.removeMask(mask, input.value);
-
-      const maskedValue = this.applyMask(
-        unmaskedValue,
-        mask
-      );
-      input.value = maskedValue;
-      input.checkValidity();
-    }
+    const mask = input.dataset.mask;
+    const clean = this.#removeMask(input.value, mask);
+    input.value = this.#applyMask(clean, mask);
   }
 
-  removeMask(mask, value) {
-    if (!mask || !value) {
-      return value;
-    }
-
-    const maskLiteralsToRemove = mask.replace(this._allowTokensRegex, '');
-
-    if (!this._regexCache[mask]) {
-      this._regexCache[mask] = new RegExp(`[${maskLiteralsToRemove}]`, 'g');
-    }
-    return value.replace(this._regexCache[mask], '');
+  #removeMask(value, mask) {
+    if (!value) return '';
+    const lit = mask.replace(this.#tokenRe, '');
+    const re = this.#regexCache[mask] ||= new RegExp(`[${lit}]`, 'g');
+    return value.replace(re, '');
   }
 
-  applyMask(unmaskedValue, mask) {
-    if (!unmaskedValue) {
-      return unmaskedValue;
-    }
-
-    let maskedValue = '';
-    let valueIndex = 0;
-    const maskChars = mask.split('');
-
-    for (let i = 0; i < maskChars.length; i++) {
-      if (this.tokens[maskChars[i]]) {
-        const token = this.tokens[maskChars[i]];
-        if (token.validateRule.test(unmaskedValue[valueIndex]) && unmaskedValue[valueIndex]) {
-          maskedValue += unmaskedValue[valueIndex];
-          valueIndex++;
-        } else {
-          break;
+  #applyMask(clean, mask) {
+    if (!clean) return '';
+    let result = '', i = 0;
+    for (const c of mask) {
+      if (this.#tokens[c]) {
+        if (i >= clean.length) break;
+        if (this.#tokens[c].validate.test(clean[i])) {
+          result += clean[i++];
         }
       } else {
-        maskedValue += maskChars[i];
+        result += c;
       }
     }
-    return maskedValue;
+    return result;
   }
 
-  // on Focus check type and alignment
-  checkFocus(event) {
-    const input = event.target;
-    if (input.type === 'number') {
-      input.classList.remove('masky-number');
+  #onFocus(e) {
+    if (e.target.type === 'number') {
+      e.target.classList.remove('masky-number');
     }
   }
 
-  // on blur execute validation
-  validateInput(event) {
-    const input = event.target;
-    const value = input.value;
-    const currentLength = value.length;
-    const minLength = parseInt(input.getAttribute('minlength'), 10);
+  #onBlur(e) {
+    const input = e.target;
+    const val = input.value.trim();
+    const min = +input.minLength;
 
-    if (currentLength > 0 && currentLength < minLength) {
-      const defaultMessage = `The minimum number of characters required is ${minLength}. Please complete the field.`;
-      input.setCustomValidity(defaultMessage);
+    if (val && val.length < min) {
+      input.setCustomValidity(`Minimum ${min} characters required.`);
       input.reportValidity();
       return;
     }
 
-    const customValidator = input.dataset.maskValidate;
-    if (customValidator && typeof window[customValidator] === 'function') {
-      const msg = window[customValidator](value, input);
+    const validator = input.dataset.maskValidate;
+    if (validator && typeof window[validator] === 'function') {
+      const msg = window[validator](val, input);
       if (msg) {
         input.setCustomValidity(msg);
         input.reportValidity();
         return;
       }
     }
-    this._formatNumber(input);
+
+    if (input.type === 'number' && val) {
+      const num = +val;
+      if (!isNaN(num)) {
+        input.value = input.noDec > 0 ? num.toFixed(input.noDec) : Math.round(num) + '';
+        input.classList.add('masky-number');
+      }
+    }
+
     input.setCustomValidity('');
   }
+
+  destroy() {
+    this.#data.forEach(({ handlers, typeChanged }, input) => {
+      Object.keys(handlers).forEach(ev =>
+        input.removeEventListener(ev, handlers[ev])
+      );
+      if (typeChanged) input.removeAttribute('type');
+    });
+    this.#data.clear();
+  }
+
+  reinit() {
+    this.destroy();
+    this.#init();
+  }
 }
-const masky = new inputMask();
+const masky = new InputMask();
